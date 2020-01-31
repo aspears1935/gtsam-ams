@@ -99,7 +99,7 @@ public:
     // Consequently, the Jacobians are:
     // [ derror_x/dx  derror_x/dy  derror_x/dtheta ] = [1 0 0]
     // [ derror_y/dx  derror_y/dy  derror_y/dtheta ] = [0 1 0]
-    if (H) (*H) = (Matrix(1,6) << 0.0,0.0,1.0,0.0,0.0,0.0).finished();
+    if (H) (*H) = (Matrix(1,6) << 0.0,0.0,0.0,0.0,0.0,1.0).finished();
     return (Vector(1) << q.z() - mz_).finished();
   }
 
