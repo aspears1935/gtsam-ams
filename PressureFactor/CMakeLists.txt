@@ -8,6 +8,21 @@ project( PressureFactor )
 
 find_package( OpenCV REQUIRED )
 find_package( GTSAM REQUIRED )
+find_package( Boost 1.50 REQUIRED )
+find_package( Eigen3 REQUIRED)
+
+include_directories(${GTSAM_INCLUDE_DIR})
+include_directories(${Boost_INCLUDE_DIR})
+
+set(GTSAM_LIBRARIES gtsam)
+
+find_package(GTSAMCMakeTools)
+include(GtsamMakeConfigFile)
+include(GtsamBuildTypes)
+include(GtsamTesting)
+
+set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH}" "${GTSAM_DIR}/../GTSAMCMakeTools")
+
 # If the package has been found, several variables will
 # be set, you can find the full list with descriptions
 # in the OpenCVConfig.cmake file.
@@ -26,5 +41,6 @@ message(STATUS "    libraries: ${GTSAM_LIBS}")
 message(STATUS "    include path: ${GTSAM_INCLUDE_DIRS}")
 
 
-add_executable( PressureFactor PressureFactor.cpp )
-target_link_libraries( PressureFactor ${GTSAM_LIBS} )
+#add_executable( PressureFactor PressureFactor.cpp )
+gtsamAddExamplesGlob(  "*.cpp" "" "gtsam;${Boost_LIBS}" )
+target_link_libraries( PressureFactor ${GTSAM_LIBS} ${Boost_LIBS} ${Eigen3_LIBS} )
