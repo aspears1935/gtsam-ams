@@ -124,11 +124,13 @@ int main(int argc, char** argv) {
 
   // 2a. Add odometry factors
   // For simplicity, we will use the same noise model for each odometry factor
-  noiseModel::Diagonal::shared_ptr odometryNoise = noiseModel::Diagonal::Variances((Vector(6) << 0.2, 0.2, 0.2, 0.1, 0.1, 0.1).finished());
+  noiseModel::Diagonal::shared_ptr priorNoise = noiseModel::Diagonal::Variances((Vector(6) << 0.000001, 0.000001, 0.000001, 0.000001, 0.000001, 0.000001).finished());
+  noiseModel::Diagonal::shared_ptr odometryNoise = noiseModel::Diagonal::Variances((Vector(6) << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1).finished());
+  cout << odometryNoise << endl;
   // Create odometry (Between) factors between consecutive poses
   Rot3 zeroRot3 = Rot3::ypr(0, 0, 0);
-  Point3 zonlyPoint3(0,0,1.1);
-  graph.add(PriorFactor<Pose3>(1, Pose3(Rot3::ypr(0.0, 0.0, 0.0), Point3(0.0, 0.0, 0.0))));
+  Point3 zonlyPoint3(0,0,2);
+  graph.add(PriorFactor<Pose3>(1, Pose3(Rot3::ypr(0.0, 0.0, 0.0), Point3(0.0, 0.0, 0.0)),priorNoise));
   graph.emplace_shared<BetweenFactor<Pose3> >(1, 2, Pose3(zeroRot3, zonlyPoint3), odometryNoise);
   graph.emplace_shared<BetweenFactor<Pose3> >(2, 3, Pose3(zeroRot3, zonlyPoint3), odometryNoise);
 
@@ -148,7 +150,7 @@ int main(int argc, char** argv) {
   initialEstimate.insert(3, Pose3(Rot3::ypr(0.0, 0.0, 0.0), Point3(0.0, 0.0, 2.5)));
   initialEstimate.print("\nInitial Estimate:\n"); // print
 
-  // 4. Optimize using Levenberg-Marquardt optimization. The optimizer
+ // 4. Optimize using Levenberg-Marquardt optimization. The optimizer
   // accepts an optional set of configuration parameters, controlling
   // things like convergence criteria, the type of linear system solver
   // to use, and the amount of information displayed during optimization.
