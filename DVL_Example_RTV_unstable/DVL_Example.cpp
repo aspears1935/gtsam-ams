@@ -85,15 +85,14 @@ int main(int argc, char** argv) {
   // For simplicity, we will use the same noise model for each odometry factor
   noiseModel::Diagonal::shared_ptr priorNoise = noiseModel::Diagonal::Variances((Vector(9) << 0.000001, 0.000001, 0.000001, 0.000001, 0.000001, 0.000001, 0.000001, 0.000001, 0.000001).finished());
   noiseModel::Diagonal::shared_ptr DVLNoise = noiseModel::Diagonal::Variances((Vector(9) << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1).finished());
-  noiseModel::Diagonal::shared_ptr DVLVelNoise = noiseModel::Diagonal::Variances((Vector(3) << 0.1, 0.1, 0.1).finished());
+  noiseModel::Diagonal::shared_ptr DVLVelNoise = noiseModel::Diagonal::Variances((Vector(3) << 0.01, 0.01, 0.01).finished());
   
   // Create odometry (Between) factors between consecutive poses
   Rot3 zeroRot3 = Rot3::ypr(0, 0, 0);
   Point3 zonlyPoint3(0,0,2);
-  PoseRTV x1_v, pose1;
   
   //  NonlinearEquality<gtsam::PoseRTV> poseHardPrior(x1, x1_v);  
-  PriorFactor<gtsam::PoseRTV> posePrior(1, x1_v, priorNoise);
+  PriorFactor<gtsam::PoseRTV> posePrior(1, PoseRTV(Point3(0.0, 0.0, 0.0), Rot3::ypr(0.0, 0.0, 0.0), Velocity3(10.0, 0.0, 0.0)), priorNoise);
 
   //Add pre-integrated DVL velocity factors
   double dt =0.1; //10Hz
@@ -103,6 +102,7 @@ int main(int argc, char** argv) {
   prev_DVL_velocities = Velocity3(vx, vy, vz); // DVL_Velocities;
   DVL_velocities = Velocity3(vx, vy, vz);
 
+  cout << DVL_velocities << endl;
   //Trapezoidal numerical integration
   Point3 preintDVL;
   preintDVL = Point3((DVL_velocities+prev_DVL_velocities)*dt*0.5);
@@ -114,24 +114,23 @@ int main(int argc, char** argv) {
   //graph.emplace_shared<PriorFactor<PoseRTV> >(1, x1_v); //, priorNoise));
   //graph += NonlinearEquality<PoseRTV>(x1, pose1); //, priorNoise));
   graph += posePrior; //PriorFactor<PoseRTV>(x1, pose1); //, priorNoise));
-  graph += BetweenFactor<PoseRTV>(1, 2, PoseRTV(preintDVL, zeroRot3, DVL_velocities), DVLNoise);
-  graph += BetweenFactor<PoseRTV>(2, 3, PoseRTV(preintDVL, zeroRot3, DVL_velocities), DVLNoise);
+  graph += velPrior; //PriorFactor<PoseRTV>(x1, pose1); //, priorNoise));  
+
+  graph += BetweenFactor<PoseRTV>(1, 2, PoseRTV(preintDVL, zeroRot3, Velocity3(0,0,0)), DVLNoise);
+  graph += BetweenFactor<PoseRTV>(2, 3, PoseRTV(preintDVL, zeroRot3, Velocity3(0,0,0)), DVLNoise);
 
   //Add DVL Velocity Constraints
-  graph += VelocityConstraint(1,2,dt);
-  graph += VelocityConstraint(2,3,dt);
+  graph += VelocityConstraint(1, 2, dt, DVLVelNoise);
+  graph += VelocityConstraint(2, 3, dt, DVLVelNoise);
 
   graph.print("\nFactor Graph:\n"); // print
-
-
-
   
   // 3. Create the data structure to hold the initialEstimate estimate to the solution
   // For illustrative purposes, these have been deliberately set to incorrect values
   Values initialEstimate;
-  initialEstimate.insert(1, PoseRTV(Point3(0.0, 0.0, 0.5), Rot3::ypr(0.0, 0.0, 0.0), Velocity3(0.0, 0.0, 1.5)));
-  initialEstimate.insert(2, PoseRTV(Point3(0.0, 0.0, 1.5), Rot3::ypr(0.0, 0.0, 0.0), Velocity3(0.0, 0.0, 1.5)));
-  initialEstimate.insert(3, PoseRTV(Point3(0.0, 0.0, 2.5), Rot3::ypr(0.0, 0.0, 0.0), Velocity3(0.0, 0.0, 1.5)));
+  initialEstimate.insert(1, PoseRTV(Point3(0.5, 0.0, 0.0), Rot3::ypr(0.0, 0.0, 0.0), Velocity3(10.5, 0.0, 0.0)));
+  initialEstimate.insert(2, PoseRTV(Point3(1.5, 0.0, 0.0), Rot3::ypr(0.0, 0.0, 0.0), Velocity3(10.5, 0.0, 0.0)));
+  initialEstimate.insert(3, PoseRTV(Point3(2.5, 0.0, 0.0), Rot3::ypr(0.0, 0.0, 0.0), Velocity3(10.5, 0.0, 0.0)));
   initialEstimate.print("\nInitial Estimate:\n"); // print
 
  // 4. Optimize using Levenberg-Marquardt optimization. The optimizer
