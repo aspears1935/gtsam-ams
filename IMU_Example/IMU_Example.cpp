@@ -99,13 +99,13 @@ int main(int argc, char* argv[])
 
   // Format is (N,E,D,qX,qY,qZ,qW,velN,velE,velD)
   Eigen::Matrix<double,10,1> initial_state = Eigen::Matrix<double,10,1>::Zero();
-  getline(file, value, ','); // i
+  /*  getline(file, value, ','); // i
   for (int i=0; i<9; i++) {
     getline(file, value, ',');
     initial_state(i) = atof(value.c_str());
   }
   getline(file, value, '\n');
-  initial_state(9) = atof(value.c_str());
+  initial_state(9) = atof(value.c_str());*/
   cout << "initial state:\n" << initial_state.transpose() << "\n\n";
 
   // Assemble initial quaternion through gtsam constructor ::quaternion(w,x,y,z);
@@ -176,9 +176,9 @@ int main(int argc, char* argv[])
   double current_position_error = 0.0, current_orientation_error = 0.0;
 
   double output_time = 0.0;
-  double dt = 0.005;  // The real system has noise, but here, results are nearly
+  ///  double dt = 0.005;  // The real system has noise, but here, results are nearly
                       // exactly the same, so keeping this for simplicity.
-
+  double dt = 0.01;
   // All priors have been set up, now iterate through the data file.
   while (file.good()) {
 
@@ -195,8 +195,14 @@ int main(int argc, char* argv[])
       getline(file, value, '\n');
       imu(5) = atof(value.c_str());
 
+      ///AMS Added:
+      Vector3 measuredAcc, measuredOmega;
+      measuredAcc=Vector3(0.0,0.0,0.0);
+      measuredOmega=Vector3(3.141592*dt,0.0,0.0);
+
       // Adding the IMU preintegration.
-      imu_preintegrated_->integrateMeasurement(imu.head<3>(), imu.tail<3>(), dt);
+      ///      imu_preintegrated_->integrateMeasurement(imu.head<3>(), imu.tail<3>(), dt);
+      imu_preintegrated_->integrateMeasurement(measuredAcc, measuredOmega, dt);
 
     } else if (type == 1) { // GPS measurement
       Eigen::Matrix<double,7,1> gps = Eigen::Matrix<double,7,1>::Zero();
@@ -240,7 +246,7 @@ int main(int argc, char* argv[])
                                   gps(1),  // E,
                                   gps(2)), // D,
                            correction_noise);
-      graph->add(gps_factor);
+      //graph->add(gps_factor);
 
       // Now optimize and compare results.
       prop_state = imu_preintegrated_->predict(prev_state, prev_bias);
@@ -259,29 +265,35 @@ int main(int argc, char* argv[])
       // Reset the preintegration object.
       imu_preintegrated_->resetIntegrationAndSetBias(prev_bias);
 
+      
       // Print out the position and orientation error for comparison.
       Vector3 gtsam_position = prev_state.pose().translation();
-      Vector3 position_error = gtsam_position - gps.head<3>();
-      current_position_error = position_error.norm();
+      //Vector3 position_error = gtsam_position - gps.head<3>();
+      //current_position_error = position_error.norm();
 
+      cout << gtsam_position(0) << "," << gtsam_position(1) << "," << gtsam_position(2) << endl;
+      
       Quaternion gtsam_quat = prev_state.pose().rotation().toQuaternion();
-      Quaternion gps_quat(gps(6), gps(3), gps(4), gps(5));
-      Quaternion quat_error = gtsam_quat * gps_quat.inverse();
-      quat_error.normalize();
-      Vector3 euler_angle_error(quat_error.x()*2,
-                                 quat_error.y()*2,
-                                 quat_error.z()*2);
-      current_orientation_error = euler_angle_error.norm();
 
+      cout << prev_state.pose().rotation().ypr() << endl;
+      
+      ///Quaternion gps_quat(gps(6), gps(3), gps(4), gps(5));
+      ///Quaternion quat_error = gtsam_quat * gps_quat.inverse();
+      ///quat_error.normalize();
+      ///Vector3 euler_angle_error(quat_error.x()*2,
+      ///                           quat_error.y()*2,
+      ///                           quat_error.z()*2);
+      /// current_orientation_error = euler_angle_error.norm();
+      
       // display statistics
-      cout << "Position error:" << current_position_error << "\t " << "Angular error:" << current_orientation_error << "\n";
+      ///      cout << "Position error:" << current_position_error << "\t " << "Angular error:" << current_orientation_error << "\n";
 
-      fprintf(fp_out, "%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n",
+      /*      fprintf(fp_out, "%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n",
               output_time, gtsam_position(0), gtsam_position(1), gtsam_position(2),
               gtsam_quat.x(), gtsam_quat.y(), gtsam_quat.z(), gtsam_quat.w(),
               gps(0), gps(1), gps(2),
               gps_quat.x(), gps_quat.y(), gps_quat.z(), gps_quat.w());
-
+      */
       output_time += 1.0;
 
     } else {
