@@ -48,9 +48,11 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <chrono>
 
 using namespace gtsam;
 using namespace std;
+using namespace chrono;
 
 using symbol_shorthand::X; // Pose3 (x,y,z,r,p,y)
 using symbol_shorthand::V; // Vel   (xdot,ydot,zdot)
@@ -94,7 +96,7 @@ int main(int argc, char* argv[])
   // Begin parsing the CSV file.  Input the first line for initialization.
   // From there, we'll iterate through the file and we'll preintegrate the IMU
   // or add in the GPS given the input.
-  ifstream file(data_filename.c_str());
+  ///  ifstream file(data_filename.c_str());
   string value;
 
   // Format is (N,E,D,qX,qY,qZ,qW,velN,velE,velD)
@@ -180,38 +182,44 @@ int main(int argc, char* argv[])
                       // exactly the same, so keeping this for simplicity.
   double dt = 0.01;
   // All priors have been set up, now iterate through the data file.
-  while (file.good()) {
-
+  ///  while (file.good()) {
+  for(int i=0; i<10000; i++) {
     // Parse out first value
-    getline(file, value, ',');
-    int type = atoi(value.c_str());
+    ///getline(file, value, ',');
+    ///int type = atoi(value.c_str());
 
-    if (type == 0) { // IMU measurement
+    auto start = high_resolution_clock::now(); //Get time at start to measure excecution time
+      
+    ///if (type == 0) { // IMU measurement
+    if (i%10) { // IMU measurement
       Eigen::Matrix<double,6,1> imu = Eigen::Matrix<double,6,1>::Zero();
-      for (int i=0; i<5; ++i) {
-        getline(file, value, ',');
-        imu(i) = atof(value.c_str());
-      }
-      getline(file, value, '\n');
-      imu(5) = atof(value.c_str());
+      ///for (int i=0; i<5; ++i) {
+      ///  getline(file, value, ',');
+      ///  imu(i) = atof(value.c_str());
+      ///}
+      ///getline(file, value, '\n');
+      ///imu(5) = atof(value.c_str());
 
+
+      
       ///AMS Added:
       Vector3 measuredAcc, measuredOmega;
       measuredAcc=Vector3(0.0,0.0,0.0);
-      measuredOmega=Vector3(3.141592*dt,0.0,0.0);
+      measuredOmega=Vector3(0.01*3.141592*dt,0.0,0.0);
 
       // Adding the IMU preintegration.
       ///      imu_preintegrated_->integrateMeasurement(imu.head<3>(), imu.tail<3>(), dt);
       imu_preintegrated_->integrateMeasurement(measuredAcc, measuredOmega, dt);
 
-    } else if (type == 1) { // GPS measurement
+      ///    } else if (type == 1) { // GPS measurement
+    } else { // GPS measurement
       Eigen::Matrix<double,7,1> gps = Eigen::Matrix<double,7,1>::Zero();
-      for (int i=0; i<6; ++i) {
-        getline(file, value, ',');
-        gps(i) = atof(value.c_str());
-      }
-      getline(file, value, '\n');
-      gps(6) = atof(value.c_str());
+      ///for (int i=0; i<6; ++i) {
+      ///  getline(file, value, ',');
+      ///  gps(i) = atof(value.c_str());
+      ///}
+      ///getline(file, value, '\n');
+      ///gps(6) = atof(value.c_str());
 
       correction_count++;
 
@@ -265,17 +273,21 @@ int main(int argc, char* argv[])
       // Reset the preintegration object.
       imu_preintegrated_->resetIntegrationAndSetBias(prev_bias);
 
-      
       // Print out the position and orientation error for comparison.
       Vector3 gtsam_position = prev_state.pose().translation();
       //Vector3 position_error = gtsam_position - gps.head<3>();
       //current_position_error = position_error.norm();
 
-      cout << gtsam_position(0) << "," << gtsam_position(1) << "," << gtsam_position(2) << endl;
+      //      cout << gtsam_position(0) << "," << gtsam_position(1) << "," << gtsam_position(2) << endl;
       
       Quaternion gtsam_quat = prev_state.pose().rotation().toQuaternion();
 
-      cout << prev_state.pose().rotation().ypr() << endl;
+      //Get time after excecution to get total excecution time
+      auto stop = high_resolution_clock::now();
+      auto duration = duration_cast<microseconds>(stop-start);
+      cout << duration.count() << endl;
+            
+      // cout << prev_state.pose().rotation().ypr() << endl;
       
       ///Quaternion gps_quat(gps(6), gps(3), gps(4), gps(5));
       ///Quaternion quat_error = gtsam_quat * gps_quat.inverse();
@@ -296,10 +308,11 @@ int main(int argc, char* argv[])
       */
       output_time += 1.0;
 
-    } else {
-      cerr << "ERROR parsing file\n";
-      return 1;
+      ///    } else {
+      /// cerr << "ERROR parsing file\n";
+      /// return 1;
     }
+
   }
   fclose(fp_out);
   cout << "Complete, results written to " << output_filename << "\n\n";;
