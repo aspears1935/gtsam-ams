@@ -69,7 +69,7 @@ int main(int argc, char** argv) {
   bool use_combined_imu = false;
   
   // Define the smoother lag (in seconds)
-  double lag = 2.0;
+  double lag = 0.5;
 
   // Create a fixed lag smoother
   // The Batch version uses Levenberg-Marquardt to perform the nonlinear optimization
@@ -120,6 +120,8 @@ int main(int argc, char** argv) {
   
   ///newValues.insert(priorKey, priorMean); // Initialize the first pose at the mean of the prior
   newTimestamps[X(0)] = 0.0; // Set the timestamp associated with this key to 0.0 seconds;
+  newTimestamps[V(0)] = 0.0; // Set the timestamp associated with this key to 0.0 seconds;
+  newTimestamps[B(0)] = 0.0; // Set the timestamp associated with this key to 0.0 seconds;
 
   newFactors.print();
 
@@ -167,14 +169,12 @@ int main(int argc, char** argv) {
   double deltaT = 0.01;
   
   for(double time = deltaT; time <= 3.0; time += deltaT) {
-
     // Define the keys related to this timestamp
-    int previousKey(1000 * (time-deltaT));
-    int currentKey(1000 * (time));
-
+    int currentKey = round(1000 * time);
     // Assign the current key to the current timestamp
     newTimestamps[X(currentKey)] = time;
-
+    newTimestamps[V(currentKey)] = time;
+    newTimestamps[B(currentKey)] = time;
     if(currentKey % 100) //Limit IMU to 10Hz and preintegrate between
       {
 	//Get new IMU reading and preintegrate
@@ -187,11 +187,13 @@ int main(int argc, char** argv) {
 	// Adding the IMU preintegration.
 	///      imu_preintegrated_->integrateMeasurement(imu.head<3>(), imu.tail<3>(), dt);
 	imu_preintegrated_->integrateMeasurement(measuredAcc, measuredOmega, deltaT);
+	cout << "Preint: " << currentKey << endl;
       }
 
     else { //add preintegrated factors every 10Hz
       ///correction_count++;
-
+      int previousKey = round(1000*(time-(deltaT*10)));
+      cout << "Add: " << currentKey << endl;
       // Adding IMU factor and optimizing.
       if (use_combined_imu) {
 	const PreintegratedCombinedMeasurements& preint_imu_combined =
@@ -217,40 +219,53 @@ int main(int argc, char** argv) {
 							zero_bias, bias_noise_model));
       }
 
+      //      newFactors.print();
       // Now optimize and compare results.
       prop_state = imu_preintegrated_->predict(prev_state, prev_bias);
       newValues.insert(X(currentKey), prop_state.pose());
       newValues.insert(V(currentKey), prop_state.v());
       newValues.insert(B(currentKey), prev_bias);
-
       // Update the smoothers with the new factors. In this example, batch smoother needs one iteration
       // to accurately converge. The ISAM smoother doesn't, but we only start getting estiates when
       // both are ready for simplicity.
       Values resultISAM2;
       Values resultBatch;
-      if (time >= 0.50) {
+      if (time >= 0.2) {
+	/*	cout << "  Batch Smoother Keys: " << endl;
+	for(const FixedLagSmoother::KeyTimestampMap::value_type& key_timestamp: smootherBatch.timestamps()) {
+	  cout << setprecision(5) << "    Key: " << key_timestamp.first << "  Time: " << key_timestamp.second << endl;
+	}
+	cout << "  iSAM2 Smoother Keys: " << endl;
+	for(const FixedLagSmoother::KeyTimestampMap::value_type& key_timestamp: smootherISAM2.timestamps()) {
+	  cout << setprecision(5) << "    Key: " << key_timestamp.first << "  Time: " << key_timestamp.second << endl;
+	} */
 	smootherBatch.update(newFactors, newValues, newTimestamps);
+	newFactors.print();
+	newValues.print();
 	smootherISAM2.update(newFactors, newValues, newTimestamps);
 	for(size_t i = 1; i < 2; ++i) { // Optionally perform multiple iSAM2 iterations
           smootherISAM2.update();
 	}
-	 
 	// Print the optimized current pose
+	cout << time << endl;
 	cout << setprecision(5) << "Timestamp = " << time << endl;
-	smootherBatch.calculateEstimate<Pose3>(currentKey).print("Batch Estimate:");
-	smootherISAM2.calculateEstimate<Pose3>(currentKey).print("iSAM2 Estimate:");
+	resultBatch=smootherBatch.calculateEstimate();
+	resultISAM2=smootherISAM2.calculateEstimate();
+      	smootherBatch.calculateEstimate<Pose3>(X(currentKey)).print("Batch Estimate:");
+	cout << endl;
+	smootherISAM2.calculateEstimate<Pose3>(X(currentKey)).print("iSAM2 Estimate:");
 	cout << endl;
 	
 	// Clear contains for the next iteration
 	newTimestamps.clear();
 	newValues.clear();
 	newFactors.resize(0);
-      }
-      // Overwrite the beginning of the preintegration for the next step.
-      prev_state = NavState(resultISAM2.at<Pose3>(X(currentKey)),
-			    resultISAM2.at<Vector3>(V(currentKey)));
-      prev_bias = resultISAM2.at<imuBias::ConstantBias>(B(currentKey));
 
+	// Overwrite the beginning of the preintegration for the next step.
+	prev_state = NavState(resultISAM2.at<Pose3>(X(currentKey)),
+			      resultISAM2.at<Vector3>(V(currentKey)));
+	prev_bias = resultISAM2.at<imuBias::ConstantBias>(B(currentKey));
+      }
       // Reset the preintegration object.
       imu_preintegrated_->resetIntegrationAndSetBias(prev_bias);
     }
