@@ -69,7 +69,7 @@ int main(int argc, char** argv) {
   bool use_combined_imu = false;
   
   // Define the smoother lag (in seconds)
-  double lag = 0.5;
+  double lag = 2.0;
 
   // Create a fixed lag smoother
   // The Batch version uses Levenberg-Marquardt to perform the nonlinear optimization
@@ -95,7 +95,7 @@ int main(int argc, char** argv) {
   // Format is (N,E,D,qX,qY,qZ,qW,velN,velE,velD)
   Eigen::Matrix<double,10,1> initial_state = Eigen::Matrix<double,10,1>::Zero();
   cout << "initial state:\n" << initial_state.transpose() << "\n\n";
-
+  
   // Assemble initial quaternion through gtsam constructor ::quaternion(w,x,y,z);
   Rot3 prior_rotation = Rot3::Quaternion(initial_state(6), initial_state(3),
 					 initial_state(4), initial_state(5));
@@ -123,7 +123,7 @@ int main(int argc, char** argv) {
   newTimestamps[V(0)] = 0.0; // Set the timestamp associated with this key to 0.0 seconds;
   newTimestamps[B(0)] = 0.0; // Set the timestamp associated with this key to 0.0 seconds;
 
-  newFactors.print();
+  //  newFactors.print();
 
   // We use the sensor specs to build the noise model for the IMU factor.
   double accel_noise_sigma = 0.0003924;
@@ -171,16 +171,15 @@ int main(int argc, char** argv) {
   for(double time = deltaT; time <= 3.0; time += deltaT) {
     // Define the keys related to this timestamp
     int currentKey = round(1000 * time);
-    // Assign the current key to the current timestamp
-    newTimestamps[X(currentKey)] = time;
-    newTimestamps[V(currentKey)] = time;
-    newTimestamps[B(currentKey)] = time;
     if(currentKey % 100) //Limit IMU to 10Hz and preintegrate between
       {
 	//Get new IMU reading and preintegrate
 	Eigen::Matrix<double,6,1> imu = Eigen::Matrix<double,6,1>::Zero();
 	Vector3 measuredAcc, measuredOmega;
-	measuredAcc=Vector3(0.0,0.0,0.0);
+	if(time == 1)
+	  measuredAcc=Vector3(0.0,0.0,0.0);
+	else
+	  measuredAcc=Vector3(0.0,0.0,0.0);
 	//      measuredOmega=Vector3(0.01*3.141592*dt,0.0,0.0);
 	measuredOmega=Vector3(0.0,0.0,0.0);
 	
@@ -225,29 +224,27 @@ int main(int argc, char** argv) {
       newValues.insert(X(currentKey), prop_state.pose());
       newValues.insert(V(currentKey), prop_state.v());
       newValues.insert(B(currentKey), prev_bias);
+      
+      // Assign the current key to the current timestamp
+      newTimestamps[X(currentKey)] = time;
+      newTimestamps[V(currentKey)] = time;
+      newTimestamps[B(currentKey)] = time;
+
       // Update the smoothers with the new factors. In this example, batch smoother needs one iteration
       // to accurately converge. The ISAM smoother doesn't, but we only start getting estiates when
       // both are ready for simplicity.
       Values resultISAM2;
       Values resultBatch;
       if (time >= 0.2) {
-	/*	cout << "  Batch Smoother Keys: " << endl;
-	for(const FixedLagSmoother::KeyTimestampMap::value_type& key_timestamp: smootherBatch.timestamps()) {
-	  cout << setprecision(5) << "    Key: " << key_timestamp.first << "  Time: " << key_timestamp.second << endl;
-	}
-	cout << "  iSAM2 Smoother Keys: " << endl;
-	for(const FixedLagSmoother::KeyTimestampMap::value_type& key_timestamp: smootherISAM2.timestamps()) {
-	  cout << setprecision(5) << "    Key: " << key_timestamp.first << "  Time: " << key_timestamp.second << endl;
-	} */
 	smootherBatch.update(newFactors, newValues, newTimestamps);
-	newFactors.print();
-	newValues.print();
+	//newFactors.print();
+	//newValues.print();
+
 	smootherISAM2.update(newFactors, newValues, newTimestamps);
 	for(size_t i = 1; i < 2; ++i) { // Optionally perform multiple iSAM2 iterations
           smootherISAM2.update();
 	}
 	// Print the optimized current pose
-	cout << time << endl;
 	cout << setprecision(5) << "Timestamp = " << time << endl;
 	resultBatch=smootherBatch.calculateEstimate();
 	resultISAM2=smootherISAM2.calculateEstimate();
