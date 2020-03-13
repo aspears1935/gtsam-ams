@@ -105,8 +105,10 @@ int main(int argc, char** argv) {
   imuBias::ConstantBias prior_imu_bias; // assume zero initial bias 
 
   // Assemble prior noise model and add it the graph.
-  noiseModel::Diagonal::shared_ptr pose_noise_model = noiseModel::Diagonal::Sigmas((Vector(6) << 0.01, 0.01, 0.01, 0.5, 0.5, 0.5).finished()); // rad,rad,rad,m, m, m
-  noiseModel::Diagonal::shared_ptr velocity_noise_model = noiseModel::Isotropic::Sigma(3,0.1); // m/s
+  noiseModel::Diagonal::shared_ptr pose_noise_model = noiseModel::Isotropic::Sigma(6,1e-12); // rad,rad,rad,m, m, m
+  noiseModel::Diagonal::shared_ptr velocity_noise_model = noiseModel::Isotropic::Sigma(3,1e-12); // m/s
+  //  noiseModel::Diagonal::shared_ptr pose_noise_model = noiseModel::Diagonal::Sigmas((Vector(6) << 0.01, 0.01, 0.01, 0.5, 0.5, 0.5).finished()); // rad,rad,rad,m, m, m
+  //  noiseModel::Diagonal::shared_ptr velocity_noise_model = noiseModel::Isotropic::Sigma(3,0.1); // m/s
   noiseModel::Diagonal::shared_ptr bias_noise_model = noiseModel::Isotropic::Sigma(6,1e-3);
 
   //Add priors to list of values and factors
@@ -168,7 +170,7 @@ int main(int argc, char** argv) {
   // and adding them to the fixed-lag smoothers
   double deltaT = 0.01;
   
-  for(double time = deltaT; time <= 3.0; time += deltaT) {
+  for(double time = deltaT; time <= 100.0; time += deltaT) {
     // Define the keys related to this timestamp
     int currentKey = round(1000 * time);
     if(currentKey % 100) //Limit IMU to 10Hz and preintegrate between
@@ -236,12 +238,14 @@ int main(int argc, char** argv) {
       Values resultISAM2;
       Values resultBatch;
       if (time >= 0.2) {
+	cout << "Updating Batch Smoother" << endl;
 	smootherBatch.update(newFactors, newValues, newTimestamps);
 	//newFactors.print();
 	//newValues.print();
-
+	cout << "Updating ISAM2 Smoother" << endl;
 	smootherISAM2.update(newFactors, newValues, newTimestamps);
 	for(size_t i = 1; i < 2; ++i) { // Optionally perform multiple iSAM2 iterations
+	  cout << "Updating ISAM2 Smoother again" << endl;
           smootherISAM2.update();
 	}
 	// Print the optimized current pose
@@ -252,6 +256,17 @@ int main(int argc, char** argv) {
 	cout << endl;
 	smootherISAM2.calculateEstimate<Pose3>(X(currentKey)).print("iSAM2 Estimate:");
 	cout << endl;
+
+	//	Matrix marginalsBatch = smootherBatch.marginalCovariance(X(currentKey)); //NOT IMPLEMENTED IN GTSAM
+	Matrix XmarginalsISAM2 = smootherISAM2.marginalCovariance(X(currentKey));
+	Matrix VmarginalsISAM2 = smootherISAM2.marginalCovariance(V(currentKey));
+	Matrix BmarginalsISAM2 = smootherISAM2.marginalCovariance(B(currentKey));
+
+	//	cout << "Batch Marginals on X:" << endl << marginalsBatch << endl;
+	cout << "ISAM2 Marginals on X:" << endl << XmarginalsISAM2 << endl;
+	cout << "ISAM2 Marginals on V:" << endl << VmarginalsISAM2 << endl;
+	cout << "ISAM2 Marginals on B:" << endl << BmarginalsISAM2 << endl;
+	
 	
 	// Clear contains for the next iteration
 	newTimestamps.clear();
