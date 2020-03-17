@@ -10,25 +10,20 @@
  * -------------------------------------------------------------------------- */
 
 /**
- * @file LocalizationExample.cpp
- * @brief Simple robot localization example, with three "GPS-like" measurements
- * @author Frank Dellaert
+ * @file PressureFactor.cpp
+ * @brief Simple Pressure/depth example, with three "GPS-like" measurements in the Z direction
+ * @author Anthony Spears
  */
 
 /**
- * A simple 2D pose slam example with "GPS" measurements
- *  - The robot moves forward 2 meter each iteration
- *  - The robot initially faces along the X axis (horizontal, to the right in 2D)
- *  - We have full odometry between pose
+ * A simple 3D pressure/depth factor example with "GPS" measurements in the Z direction
  *  - We have "GPS-like" measurements implemented with a custom factor
+ * Adapted from the Pose2 2D LocalizationExample.cpp example in GTSAM 
  */
 
-// We will use Pose2 variables (x, y, theta) to represent the robot positions
-#include <gtsam/geometry/Pose2.h>
+// We will use Pose3 variables (xyz, rpy) to represent the robot positions
 #include <gtsam/geometry/Pose3.h>
 #include <gtsam/geometry/Rot3.h>
-
-
 
 // We will use simple integer Keys to refer to the robot poses.
 #include <gtsam/inference/Key.h>
@@ -61,9 +56,9 @@ using namespace std;
 using namespace gtsam;
 
 // Before we begin the example, we must create a custom unary factor to implement a
-// "GPS-like" functionality. Because standard GPS measurements provide information
-// only on the position, and not on the orientation, we cannot use a simple prior to
-// properly model this measurement.
+// "GPS-like" Z direction functionality for the dpeth sensor. Because standard GPS
+// measurements provide information only on the position, and not on the orientation,
+//we cannot use a simple prior to properly model this measurement.
 //
 // The factor will be a unary factor, affect only a single system variable. It will
 // also use a standard Gaussian noise model. Hence, we will derive our new factor from
@@ -72,15 +67,14 @@ using namespace gtsam;
 
 class UnaryFactor: public NoiseModelFactor1<Pose3> {
 
-  // The factor will hold a measurement consisting of an (X,Y) location
-  // We could this with a Point2 but here we just use two doubles
+  // The factor will hold a measurement consisting of a Z location
   double mz_;
 
 public:
   /// shorthand for a smart pointer to a factor
   typedef boost::shared_ptr<UnaryFactor> shared_ptr;
 
-  // The constructor requires the variable key, the (X, Y) measurement value, and the noise model
+  // The constructor requires the variable key, the (Z) measurement value, and the noise model
   UnaryFactor(Key j, double z, const SharedNoiseModel& model):
     NoiseModelFactor1<Pose3>(model, j), mz_(z) {}
 
@@ -94,11 +88,9 @@ public:
   Vector evaluateError(const Pose3& q, boost::optional<Matrix&> H = boost::none) const
   {
     // The measurement function for a GPS-like measurement is simple:
-    // error_x = pose.x - measurement.x
-    // error_y = pose.y - measurement.y
-    // Consequently, the Jacobians are:
-    // [ derror_x/dx  derror_x/dy  derror_x/dtheta ] = [1 0 0]
-    // [ derror_y/dx  derror_y/dy  derror_y/dtheta ] = [0 1 0]
+    // error_z = pose.z - measurement.z
+    // Consequently, the Jacobian is:
+    // [ derror_z/dphi  derror_z/dtheta  derror_z/dpsi derror_z/dx derror_z/dy derror_z/dz] = [0 0 0 0 0 1]
     if (H) (*H) = (Matrix(1,6) << 0.0,0.0,0.0,0.0,0.0,1.0).finished();
     return (Vector(1) << q.z() - mz_).finished();
   }
@@ -110,10 +102,6 @@ public:
     return boost::static_pointer_cast<gtsam::NonlinearFactor>(
         gtsam::NonlinearFactor::shared_ptr(new UnaryFactor(*this))); }
 
-  // Additionally, we encourage you the use of unit testing your custom factors,
-  // (as all GTSAM factors are), in which you would need an equals and print, to satisfy the
-  // GTSAM_CONCEPT_TESTABLE_INST(T) defined in Testable.h, but these are not needed below.
-
 }; // UnaryFactor
 
 
@@ -122,49 +110,53 @@ int main(int argc, char** argv) {
   // 1. Create a factor graph container and add factors to it
   NonlinearFactorGraph graph;
 
-  // 2a. Add odometry factors
+  // 2a. Add prior factor and create noise and odometry models
   // For simplicity, we will use the same noise model for each odometry factor
   noiseModel::Diagonal::shared_ptr priorNoise = noiseModel::Diagonal::Variances((Vector(6) << 0.000001, 0.000001, 0.000001, 0.000001, 0.000001, 0.000001).finished());
   noiseModel::Diagonal::shared_ptr odometryNoise = noiseModel::Diagonal::Variances((Vector(6) << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1).finished());
   cout << odometryNoise << endl;
   // Create odometry (Between) factors between consecutive poses
   Rot3 zeroRot3 = Rot3::ypr(0, 0, 0);
-  Point3 zonlyPoint3(0,0,2);
-  graph.add(PriorFactor<Pose3>(1, Pose3(Rot3::ypr(0.0, 0.0, 0.0), Point3(0.0, 0.0, 0.0)),priorNoise));
-  graph.emplace_shared<BetweenFactor<Pose3> >(1, 2, Pose3(zeroRot3, zonlyPoint3), odometryNoise);
-  graph.emplace_shared<BetweenFactor<Pose3> >(2, 3, Pose3(zeroRot3, zonlyPoint3), odometryNoise);
+  Point3 zonlyPoint3(0,0,0.11);
+  graph.add(PriorFactor<Pose3>(0, Pose3(Rot3::ypr(0.0, 0.0, 0.0), Point3(0.0, 0.0, 0.0)),priorNoise));
 
-  // 2b. Add "GPS-like" measurements
+  // 2b. Add "GPS-like" depth measurements
   // We will use our custom UnaryFactor for this.
-  noiseModel::Diagonal::shared_ptr unaryNoise = noiseModel::Diagonal::Sigmas(Vector1(0.000001)); // 10cm std on x,y
-  graph.emplace_shared<UnaryFactor>(1, 0.0, unaryNoise);
-  graph.emplace_shared<UnaryFactor>(2, 1.0, unaryNoise);
-  graph.emplace_shared<UnaryFactor>(3, 2.0, unaryNoise);
-  graph.print("\nFactor Graph:\n"); // print
+  noiseModel::Diagonal::shared_ptr unaryNoise = noiseModel::Diagonal::Sigmas(Vector1(0.000001)); //  std on z
 
-  // 3. Create the data structure to hold the initialEstimate estimate to the solution
-  // For illustrative purposes, these have been deliberately set to incorrect values
   Values initialEstimate;
-  initialEstimate.insert(1, Pose3(Rot3::ypr(0.0, 0.0, 0.0), Point3(0.0, 0.0, 0.5)));
-  initialEstimate.insert(2, Pose3(Rot3::ypr(0.0, 0.0, 0.0), Point3(0.0, 0.0, 1.5)));
-  initialEstimate.insert(3, Pose3(Rot3::ypr(0.0, 0.0, 0.0), Point3(0.0, 0.0, 2.5)));
-  initialEstimate.print("\nInitial Estimate:\n"); // print
+  initialEstimate.insert(0, Pose3(Rot3::ypr(0.0, 0.0, 0.0), Point3(0.0, 0.0, 0.0)));
 
- // 4. Optimize using Levenberg-Marquardt optimization. The optimizer
-  // accepts an optional set of configuration parameters, controlling
-  // things like convergence criteria, the type of linear system solver
-  // to use, and the amount of information displayed during optimization.
-  // Here we will use the default set of parameters.  See the
-  // documentation for the full set of parameters.
-  LevenbergMarquardtOptimizer optimizer(graph, initialEstimate);
-  Values result = optimizer.optimize();
-  result.print("Final Result:\n");
+  // Loop through and add depth factors and initial estimates
+  double deltaT=0.1;
+  for(double time=deltaT; time<=100; time+=deltaT)
+    {
+      int currentKey = round(1000*time);
+      int prevKey = round(1000*(time-deltaT));
+      double depth = 1*time; //Simulated depth reading assuming velocity of 1m/s diving in Z direction
+      graph.emplace_shared<UnaryFactor>(currentKey, depth, unaryNoise);
+      graph.emplace_shared<BetweenFactor<Pose3> >(prevKey, currentKey, Pose3(zeroRot3, zonlyPoint3), odometryNoise);
+      graph.print("\nFactor Graph:\n"); // print
 
-  // 5. Calculate and print marginal covariances for all variables
-  Marginals marginals(graph, result);
-  cout << "x1 covariance:\n" << marginals.marginalCovariance(1) << endl;
-  cout << "x2 covariance:\n" << marginals.marginalCovariance(2) << endl;
-  cout << "x3 covariance:\n" << marginals.marginalCovariance(3) << endl;
+      // 3. Create the data structure to hold the initialEstimate estimate to the solution
+      // For illustrative purposes, these have been deliberately set to incorrect values
+      initialEstimate.insert(currentKey, Pose3(Rot3::ypr(0.0, 0.0, 0.0), Point3(0.0, 0.0, depth+0.3)));
+      initialEstimate.print("\nInitial Estimate:\n"); // print
 
+      // 4. Optimize using Levenberg-Marquardt optimization. The optimizer
+      // accepts an optional set of configuration parameters, controlling
+      // things like convergence criteria, the type of linear system solver
+      // to use, and the amount of information displayed during optimization.
+      // Here we will use the default set of parameters.  See the
+      // documentation for the full set of parameters.
+      LevenbergMarquardtOptimizer optimizer(graph, initialEstimate);
+      Values result = optimizer.optimize();
+      result.print("Final Result:\n");
+
+      // 5. Calculate and print marginal covariances for all variables
+      Marginals marginals(graph, result);
+      cout << "x covariance:\n" << marginals.marginalCovariance(currentKey) << endl;
+    }
+  
   return 0;
 }
