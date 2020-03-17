@@ -1,0 +1,16 @@
+*.cmake
+*/CMakeCache.txt
+*/CMakeFiles
+*~
+*#
+*/Makefile
+*.csv
+ConcurrentFilteringAndSmoothingExample/ConcurrentFilteringAndSmoothingExample
+DVL_Example/DVL_Example
+DVL_Example_RTV_unstable/DVL_Example
+FixedLagSmootherExample/FixedLagSmootherExample
+IMU_Example/IMU_Example
+IMU_FixedLagSmoother/IMU_FixedLagSmoother
+IMU_ISAM2_Example/IMU_ISAM2_Example
+Pose3FixedLagSmoother/Pose3FixedLagSmoother
+PressureFactor/PressureFactor
