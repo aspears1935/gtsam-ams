@@ -10,20 +10,20 @@
  * -------------------------------------------------------------------------- */
 
 /**
- * @file LocalizationExample.cpp
- * @brief Simple robot localization example, with three "GPS-like" measurements
+ * @file DVL_Example_RTV.cpp
+ * @brief More advanced robot localization example, with DVL velocity measurements
  * @author Frank Dellaert
  */
 
 /**
- * A simple 2D pose slam example with "GPS" measurements
- *  - The robot moves forward 2 meter each iteration
- *  - The robot initially faces along the X axis (horizontal, to the right in 2D)
- *  - We have full odometry between pose
- *  - We have "GPS-like" measurements implemented with a custom factor
+ * A more complex DVL localization example with RTV state representations for use with
+ *  velocity constraints using the GTSAM_Unstable library
+ *  - We have full velocity measurements at each pose
+ * This was developed from the LocalizationExample.cpp example in the GTSAM library
  */
 
-// We will use Pose2 variables (x, y, theta) to represent the robot positions
+// We will use Pose3 variables (xyz, rpy) to represent the robot positions
+// We will also use the more advanced velocity constraints and state representations available in the GTSAM_unstable library
 #include <gtsam/geometry/Pose2.h>
 #include <gtsam/geometry/Pose3.h>
 #include <gtsam/geometry/Rot3.h>
@@ -35,7 +35,7 @@
 // We will use simple integer Keys to refer to the robot poses.
 #include <gtsam/inference/Key.h>
 
-// As in OdometryExample.cpp, we use a BetweenFactor to model odometry measurements.
+// As in the basic DVL example, we use a BetweenFactor to model preintegrated odometry measurements.
 #include <gtsam/slam/BetweenFactor.h>
 #include <gtsam/slam/PriorFactor.h>
 
@@ -62,15 +62,6 @@
 using namespace std;
 using namespace gtsam;
 
-// Before we begin the example, we must create a custom unary factor to implement a
-// "GPS-like" functionality. Because standard GPS measurements provide information
-// only on the position, and not on the orientation, we cannot use a simple prior to
-// properly model this measurement.
-//
-// The factor will be a unary factor, affect only a single system variable. It will
-// also use a standard Gaussian noise model. Hence, we will derive our new factor from
-// the NoiseModelFactor1.
-#include <gtsam/nonlinear/NonlinearFactor.h>
 
 int main(int argc, char** argv) {
 
@@ -81,20 +72,22 @@ int main(int argc, char** argv) {
   // 1. Create a factor graph container and add factors to it
   NonlinearFactorGraph graph;
 
-  // 2a. Add odometry factors
+  // 2a. Add prior factors and create noise models
   // For simplicity, we will use the same noise model for each odometry factor
   noiseModel::Diagonal::shared_ptr priorNoise = noiseModel::Diagonal::Variances((Vector(9) << 0.000001, 0.000001, 0.000001, 0.000001, 0.000001, 0.000001, 0.000001, 0.000001, 0.000001).finished());
   noiseModel::Diagonal::shared_ptr DVLNoise = noiseModel::Diagonal::Variances((Vector(9) << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1).finished());
+  //Create additional noise model for DVL velocities
   noiseModel::Diagonal::shared_ptr DVLVelNoise = noiseModel::Diagonal::Variances((Vector(3) << 0.01, 0.01, 0.01).finished());
   
-  // Create odometry (Between) factors between consecutive poses
+  // Create odometry (Between) factors between consecutive poses - assume zero rotation for simplicity
   Rot3 zeroRot3 = Rot3::ypr(0, 0, 0);
   Point3 zonlyPoint3(0,0,2);
   
-  //  NonlinearEquality<gtsam::PoseRTV> poseHardPrior(x1, x1_v);  
+  //  NonlinearEquality<gtsam::PoseRTV> poseHardPrior(x1, x1_v);
+  // Use PoseRTV state representations to include velocities
   PriorFactor<gtsam::PoseRTV> posePrior(1, PoseRTV(Point3(0.0, 0.0, 0.0), Rot3::ypr(0.0, 0.0, 0.0), Velocity3(10.0, 0.0, 0.0)), priorNoise);
 
-  //Add pre-integrated DVL velocity factors
+  //Add pre-integrated DVL velocity factors as odometry BetweenFactors. 
   double dt =0.1; //10Hz
   double vx=10.0;
   double vy=0.0;
@@ -107,15 +100,20 @@ int main(int argc, char** argv) {
   Point3 preintDVL;
   preintDVL = Point3((DVL_velocities+prev_DVL_velocities)*dt*0.5);
 
+  //Add prior factor on the velocities
   VelocityPrior velPrior(1, DVL_velocities, DVLVelNoise);
+  
   //  BetweenFactor<gtsam::PoseRTV> odom(1, 2, x1_v, model9);
   //VelocityConstraint constraint(x1, x2, 0.1, 10000);
   
   //graph.emplace_shared<PriorFactor<PoseRTV> >(1, x1_v); //, priorNoise));
   //graph += NonlinearEquality<PoseRTV>(x1, pose1); //, priorNoise));
+
+  //Add prior factors to graph
   graph += posePrior; //PriorFactor<PoseRTV>(x1, pose1); //, priorNoise));
   graph += velPrior; //PriorFactor<PoseRTV>(x1, pose1); //, priorNoise));  
 
+  //Add odometry preintegrated velocity measurements to graph
   graph += BetweenFactor<PoseRTV>(1, 2, PoseRTV(preintDVL, zeroRot3, Velocity3(0,0,0)), DVLNoise);
   graph += BetweenFactor<PoseRTV>(2, 3, PoseRTV(preintDVL, zeroRot3, Velocity3(0,0,0)), DVLNoise);
 
