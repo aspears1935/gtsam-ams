@@ -10,16 +10,13 @@
  * -------------------------------------------------------------------------- */
 
 /**
- * @file Pose3FixedLagSmootherExample.cpp
- * @brief Demonstration of the fixed-lag smoothers using a full 3D (Pose3) robot example and multiple odometry-like sensors. This is based on the FixedLagSmootherExample.cpp example which uses 2D (Pose2) representations.
+ * @file IMU_FixedLagSmoother.cpp
+ * @brief Demonstration of the fixed-lag smoothers using a full 3D (Pose3) robot example and an IMU sensors. This is based on the FixedLagSmootherExample.cpp example which uses 2D (Pose2) representations.
  * @author Anthony Spears
  */
 
 /**
- * A simple 3D pose slam example with multiple odometry-like measurements
- *  - The robot initially faces along the X axis
- *  - The robot moves forward at 2m/s
- *  - We have measurements between each pose from multiple odometry sensors
+ * A simple 3D pose slam example with IMU measurements
  */
 
 // This example demonstrates the use of the Fixed-Lag Smoothers in GTSAM unstable
