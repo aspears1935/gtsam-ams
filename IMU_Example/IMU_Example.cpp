@@ -10,28 +10,20 @@
  * -------------------------------------------------------------------------- */
 
 /**
- * @file imuFactorsExample
- * @brief Test example for using GTSAM ImuFactor and ImuCombinedFactor navigation code.
- * @author Garrett (ghemann@gmail.com), Luca Carlone
+ * @file IMU_Example.cpp
+ * @brief 3D Test example for using GTSAM ImuFactor and ImuCombinedFactor navigation code.
+ * @author Anthony Spears
  */
 
 /**
- * Example of use of the imuFactors (imuFactor and combinedImuFactor) in conjunction with GPS
+ * Example of use of the imuFactors (imuFactor and combinedImuFactor)
+ * This is developed from the imuFactorsExample.cpp example in the GTSAM library
  *  - imuFactor is used by default. You can test combinedImuFactor by
  *  appending a `-c` flag at the end (see below for example command).
- *  - we read IMU and GPS data from a CSV file, with the following format:
- *  A row starting with "i" is the first initial position formatted with
- *  N, E, D, qx, qY, qZ, qW, velN, velE, velD
- *  A row starting with "0" is an imu measurement
- *  linAccN, linAccE, linAccD, angVelN, angVelE, angVelD
- *  A row starting with "1" is a gps correction formatted with
- *  N, E, D, qX, qY, qZ, qW
- *  Note that for GPS correction, we're only using the position not the rotation. The
- *  rotation is provided in the file for ground truth comparison.
+ *  State format:  N, E, D, qx, qY, qZ, qW, velN, velE, velD
+ *  IMU data format: linAccN, linAccE, linAccD, angVelN, angVelE, angVelD
  *
- *  Usage: ./ImuFactorsExample [data_csv_path] [-c]
  *  optional arguments:
- *    data_csv_path           path to the CSV file with the IMU data.
  *    -c                      use CombinedImuFactor
  */
 
@@ -93,21 +85,10 @@ int main(int argc, char* argv[])
   FILE* fp_out = fopen(output_filename.c_str(), "w+");
   fprintf(fp_out, "#time(s),x(m),y(m),z(m),qx,qy,qz,qw,gt_x(m),gt_y(m),gt_z(m),gt_qx,gt_qy,gt_qz,gt_qw\n");
 
-  // Begin parsing the CSV file.  Input the first line for initialization.
-  // From there, we'll iterate through the file and we'll preintegrate the IMU
-  // or add in the GPS given the input.
-  ///  ifstream file(data_filename.c_str());
   string value;
 
   // Format is (N,E,D,qX,qY,qZ,qW,velN,velE,velD)
   Eigen::Matrix<double,10,1> initial_state = Eigen::Matrix<double,10,1>::Zero();
-  /*  getline(file, value, ','); // i
-  for (int i=0; i<9; i++) {
-    getline(file, value, ',');
-    initial_state(i) = atof(value.c_str());
-  }
-  getline(file, value, '\n');
-  initial_state(9) = atof(value.c_str());*/
   cout << "initial state:\n" << initial_state.transpose() << "\n\n";
 
   // Assemble initial quaternion through gtsam constructor ::quaternion(w,x,y,z);
@@ -148,6 +129,7 @@ int main(int argc, char* argv[])
   Matrix66 bias_acc_omega_int = Matrix::Identity(6,6)*1e-5; // error in the bias used for preintegration
 
   boost::shared_ptr<PreintegratedCombinedMeasurements::Params> p = PreintegratedCombinedMeasurements::Params::MakeSharedD(0.0);
+
   // PreintegrationBase params:
   p->accelerometerCovariance = measured_acc_cov; // acc white noise in continuous
   p->integrationCovariance = integration_error_cov; // integration uncertainty continuous
@@ -178,30 +160,14 @@ int main(int argc, char* argv[])
   double current_position_error = 0.0, current_orientation_error = 0.0;
 
   double output_time = 0.0;
-  ///  double dt = 0.005;  // The real system has noise, but here, results are nearly
-                      // exactly the same, so keeping this for simplicity.
   double dt = 0.01;
-  // All priors have been set up, now iterate through the data file.
-  ///  while (file.good()) {
+  // All priors have been set up, now iterate.
   for(int i=0; i<10000; i++) {
-    // Parse out first value
-    ///getline(file, value, ',');
-    ///int type = atoi(value.c_str());
-
     auto start = high_resolution_clock::now(); //Get time at start to measure excecution time
       
-    ///if (type == 0) { // IMU measurement
-    if (i%10) { // IMU measurement
+    if (i%10) { // IMU measurement only - preintegrate
       Eigen::Matrix<double,6,1> imu = Eigen::Matrix<double,6,1>::Zero();
-      ///for (int i=0; i<5; ++i) {
-      ///  getline(file, value, ',');
-      ///  imu(i) = atof(value.c_str());
-      ///}
-      ///getline(file, value, '\n');
-      ///imu(5) = atof(value.c_str());
-
-
-      
+            
       ///AMS Added:
       Vector3 measuredAcc, measuredOmega;
       measuredAcc=Vector3(0.0,0.0,0.0);
@@ -211,16 +177,9 @@ int main(int argc, char* argv[])
       ///      imu_preintegrated_->integrateMeasurement(imu.head<3>(), imu.tail<3>(), dt);
       imu_preintegrated_->integrateMeasurement(measuredAcc, measuredOmega, dt);
 
-      ///    } else if (type == 1) { // GPS measurement
-    } else { // GPS measurement
+      
+    } else { // Time to add preintegrated measurements to graph at 10Hz
       Eigen::Matrix<double,7,1> gps = Eigen::Matrix<double,7,1>::Zero();
-      ///for (int i=0; i<6; ++i) {
-      ///  getline(file, value, ',');
-      ///  gps(i) = atof(value.c_str());
-      ///}
-      ///getline(file, value, '\n');
-      ///gps(6) = atof(value.c_str());
-
       correction_count++;
 
       // Adding IMU factor and GPS factor and optimizing.
