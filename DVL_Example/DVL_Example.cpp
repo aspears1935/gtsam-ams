@@ -10,25 +10,23 @@
  * -------------------------------------------------------------------------- */
 
 /**
- * @file LocalizationExample.cpp
- * @brief Simple robot localization example, with three "GPS-like" measurements
- * @author Frank Dellaert
+ * @file DVL_Example.cpp
+ * @brief Simple robot localization example, with Simple DVL velocity integrated odometry measurements
+ * @author Anthony Spears
  */
 
 /**
- * A simple 2D pose slam example with "GPS" measurements
- *  - The robot moves forward 2 meter each iteration
- *  - The robot initially faces along the X axis (horizontal, to the right in 2D)
- *  - We have full odometry between pose
- *  - We have "GPS-like" measurements implemented with a custom factor
+ * A simple 3D pose slam example with "DVL" velocity measurements
+ *  - We have full linear velocity at each pose
+ * Odometry is calculated from velocity measurements using trapezoidal numerical integration
+ # This was adapted from the LocalizationExample.cpp example from the GTSAM library
  */
 
-// We will use Pose2 variables (x, y, theta) to represent the robot positions
-#include <gtsam/geometry/Pose2.h>
+// We will use Pose3 variables (xyz, phi/theta/psi) to represent the robot positions
+// We could also use VelocityConstraints for the velocity measurements but don't currently implement this and rely only on the numerically integrated BetweenFactor odometry factors for this simple implementation. A more advanced implementation is available the our DVL_Example_RTV.cpp example.
 #include <gtsam/geometry/Pose3.h>
 #include <gtsam/geometry/Rot3.h>
 #include <gtsam_unstable/dynamics/VelocityConstraint.h>
-
 
 // We will use simple integer Keys to refer to the robot poses.
 #include <gtsam/inference/Key.h>
@@ -60,16 +58,6 @@
 using namespace std;
 using namespace gtsam;
 
-// Before we begin the example, we must create a custom unary factor to implement a
-// "GPS-like" functionality. Because standard GPS measurements provide information
-// only on the position, and not on the orientation, we cannot use a simple prior to
-// properly model this measurement.
-//
-// The factor will be a unary factor, affect only a single system variable. It will
-// also use a standard Gaussian noise model. Hence, we will derive our new factor from
-// the NoiseModelFactor1.
-#include <gtsam/nonlinear/NonlinearFactor.h>
-
 int main(int argc, char** argv) {
 
   //Syntactic sugar to clarify velocity components
@@ -84,17 +72,17 @@ int main(int argc, char** argv) {
   noiseModel::Diagonal::shared_ptr priorNoise = noiseModel::Diagonal::Variances((Vector(6) << 0.000001, 0.000001, 0.000001, 0.000001, 0.000001, 0.000001).finished());
   noiseModel::Diagonal::shared_ptr DVLNoise = noiseModel::Diagonal::Variances((Vector(6) << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1).finished());
   
-  // Create odometry (Between) factors between consecutive poses
+  // Add prior factor
   Rot3 zeroRot3 = Rot3::ypr(0, 0, 0);
   graph.add(PriorFactor<Pose3>(1, Pose3(),priorNoise));
 
   //Add pre-integrated DVL velocity factors
   double dt =0.1; //10Hz
-  double vx=10.0;
+  double vx=10.0; //10m/s in X direction
   double vy=0.0;
   double vz=0.0;
-  prev_DVL_velocities = Velocity3(vx, vy, vz); // DVL_Velocities;
-  DVL_velocities = Velocity3(vx, vy, vz);
+  prev_DVL_velocities = Velocity3(vx, vy, vz); // Previous DVL Velocity measurements
+  DVL_velocities = Velocity3(vx, vy, vz); // Current DVL Velocity measurements
 
   //Trapezoidal numerical integration
   Point3 preintDVL;
